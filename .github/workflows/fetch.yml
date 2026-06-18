@@ -72,6 +72,7 @@ jobs:
                   text.includes('amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03')
                 ) {
                   found = text;
+                  console.log('FOUND ALWAYS CHRISTMAS');
                 }
               } catch (e) {}
             });
@@ -83,26 +84,34 @@ jobs:
 
             await page.waitForTimeout(8000);
 
-            for (let i = 0; i < 35; i++) {
+            for (let i = 0; i < 160; i++) {
               await page.mouse.wheel(0, 1800);
-              await page.waitForTimeout(1500);
+              await page.waitForTimeout(900);
 
               if (found) {
                 break;
               }
             }
 
-            await page.waitForTimeout(8000);
+            await page.waitForTimeout(10000);
 
-            fs.writeFileSync('public/amazon-debug.json', JSON.stringify(seen, null, 2));
+            fs.writeFileSync(
+              'public/amazon-debug.json',
+              JSON.stringify(seen, null, 2)
+            );
 
             await browser.close();
 
             if (!found) {
-              throw new Error('Always Christmas not found. See public/amazon-debug.json after commit if available.');
+              throw new Error(
+                'Always Christmas not found. Check public/amazon-debug.json'
+              );
             }
 
-            fs.writeFileSync('public/always-christmas.json', found);
+            fs.writeFileSync(
+              'public/always-christmas.json',
+              found
+            );
           })();
           EOF
 
@@ -114,19 +123,19 @@ jobs:
           git config user.name "epg-bot"
           git config user.email "bot@users.noreply.github.com"
 
-          git add public/always-christmas.json public/amazon-debug.json || true
+          git add public/* || true
 
           if git diff --cached --quiet; then
             echo "No changes"
             exit 0
           fi
 
-          git commit -m "Update Always Christmas EPG/debug"
+          git commit -m "Update Always Christmas"
           git push
 
-      - name: Fail if Always Christmas missing
+      - name: Fail if missing
         run: |
           if [ ! -f public/always-christmas.json ]; then
-            echo "Always Christmas JSON was not created. Check public/amazon-debug.json."
+            echo "Always Christmas JSON not created"
             exit 1
           fi
