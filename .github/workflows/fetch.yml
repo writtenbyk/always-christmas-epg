@@ -33,6 +33,21 @@ jobs:
           const { chromium } = require('playwright');
           const fs = require('fs');
 
+          const TARGET_NAME = 'Always Christmas';
+          const TARGET_ID = 'amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03';
+
+          function withStartIndex(rawUrl, index) {
+            const u = new URL(rawUrl);
+            u.searchParams.set('startIndex', String(index));
+            return u.toString();
+          }
+
+          function extractNames(text) {
+            return [...text.matchAll(/"name"\s*:\s*"([^"]+)"/g)]
+              .slice(0, 40)
+              .map(m => m[1]);
+          }
+
           (async () => {
             const browser = await chromium.launch({ headless: true });
 
@@ -42,37 +57,31 @@ jobs:
               userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36'
             });
 
+            const apiUrls = new Set();
+            const debug = [];
             let found = null;
-            const seen = [];
 
             page.on('response', async (response) => {
               const url = response.url();
-
-              if (!url.includes('/gp/video/api/paginateCollection')) {
-                return;
-              }
+              if (!url.includes('/gp/video/api/paginateCollection')) return;
+              apiUrls.add(url);
 
               try {
                 const text = await response.text();
+                const hit = text.includes(TARGET_NAME) || text.includes(TARGET_ID);
 
-                const names = [...text.matchAll(/"name"\s*:\s*"([^"]+)"/g)]
-                  .slice(0, 30)
-                  .map(m => m[1]);
-
-                seen.push({
+                debug.push({
+                  source: 'page',
                   url,
                   length: text.length,
-                  alwaysChristmas: text.includes('Always Christmas'),
-                  alwaysChristmasId: text.includes('amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03'),
-                  names
+                  alwaysChristmas: text.includes(TARGET_NAME),
+                  alwaysChristmasId: text.includes(TARGET_ID),
+                  names: extractNames(text)
                 });
 
-                if (
-                  text.includes('Always Christmas') ||
-                  text.includes('amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03')
-                ) {
+                if (hit && !found) {
                   found = text;
-                  console.log('FOUND ALWAYS CHRISTMAS');
+                  console.log('FOUND from page response');
                 }
               } catch (e) {}
             });
@@ -84,34 +93,66 @@ jobs:
 
             await page.waitForTimeout(8000);
 
-            for (let i = 0; i < 160; i++) {
-              await page.mouse.wheel(0, 1800);
-              await page.waitForTimeout(900);
+            for (let i = 0; i < 80; i++) {
+              await page.mouse.wheel(0, 2200);
+              await page.waitForTimeout(700);
+              if (found) break;
+            }
 
-              if (found) {
-                break;
+            await page.waitForTimeout(5000);
+
+            const urls = [...apiUrls];
+
+            for (const baseUrl of urls) {
+              if (found) break;
+
+              for (let idx = 0; idx <= 900; idx += 10) {
+                const testUrl = withStartIndex(baseUrl, idx);
+
+                try {
+                  const res = await page.request.get(testUrl, {
+                    headers: {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+                      'Accept': 'application/json,text/plain,*/*',
+                      'Accept-Language': 'en-US,en;q=0.9',
+                      'Referer': 'https://www.amazon.com/gp/video/livetv',
+                      'Origin': 'https://www.amazon.com'
+                    },
+                    timeout: 30000
+                  });
+
+                  const text = await res.text();
+                  const hit = text.includes(TARGET_NAME) || text.includes(TARGET_ID);
+
+                  if (idx % 50 === 0 || hit) {
+                    debug.push({
+                      source: 'bruteforce',
+                      startIndex: idx,
+                      length: text.length,
+                      alwaysChristmas: text.includes(TARGET_NAME),
+                      alwaysChristmasId: text.includes(TARGET_ID),
+                      names: extractNames(text)
+                    });
+                  }
+
+                  if (hit) {
+                    found = text;
+                    console.log('FOUND from brute force startIndex=' + idx);
+                    break;
+                  }
+                } catch (e) {}
               }
             }
 
-            await page.waitForTimeout(10000);
-
-            fs.writeFileSync(
-              'public/amazon-debug.json',
-              JSON.stringify(seen, null, 2)
-            );
+            fs.writeFileSync('public/amazon-debug.json', JSON.stringify(debug, null, 2));
 
             await browser.close();
 
             if (!found) {
-              throw new Error(
-                'Always Christmas not found. Check public/amazon-debug.json'
-              );
+              throw new Error('Always Christmas not found. Check public/amazon-debug.json');
             }
 
-            fs.writeFileSync(
-              'public/always-christmas.json',
-              found
-            );
+            fs.writeFileSync('public/always-christmas.json', found);
           })();
           EOF
 
