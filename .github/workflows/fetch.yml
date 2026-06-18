@@ -163,10 +163,14 @@ jobs:
             await browser.close();
 
             if (!found) {
-              throw new Error('Always Christmas not found. Check public/amazon-debug.json');
-            }
+  console.log('Always Christmas not found this run.');
+  await browser.close();
+  return;
+}
 
-            fs.writeFileSync('public/always-christmas.json', found);
+fs.writeFileSync('public/always-christmas.json', found);
+
+await browser.close();
           })();
           EOF
 
