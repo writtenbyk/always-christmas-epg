@@ -33,20 +33,26 @@ jobs:
           const { chromium } = require('playwright');
           const fs = require('fs');
 
-          const TARGET_NAME = 'Always Christmas';
           const TARGET_ID = 'amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03';
+          const TARGET_NAME = 'Always Christmas';
+
+          function replaceStartIndex(rawUrl, index) {
+            if (rawUrl.includes('startIndex=')) {
+              return rawUrl.replace(/startIndex=\d+/g, 'startIndex=' + index);
+            }
+            return rawUrl + '&startIndex=' + index;
+          }
+
+          function hit(text) {
+            return text.includes(TARGET_ID) ||
+              text.includes(TARGET_NAME) ||
+              text.includes('Amazon_Freevee_Always_Christmas');
+          }
 
           function extractNames(text) {
             return [...text.matchAll(/"name"\s*:\s*"([^"]+)"/g)]
               .slice(0, 80)
               .map(m => m[1]);
-          }
-
-          function makeUrl(rawUrl, index) {
-            const u = new URL(rawUrl);
-            u.searchParams.set('startIndex', String(index));
-            u.searchParams.set('variant', 'desktopLinux');
-            return u.toString();
           }
 
           (async () => {
@@ -64,7 +70,10 @@ jobs:
 
             page.on('response', async (response) => {
               const url = response.url();
-              if (!url.includes('/gp/video/api/paginateCollection')) return;
+
+              if (!url.includes('/gp/video/api/paginateCollection')) {
+                return;
+              }
 
               apiUrls.add(url);
 
@@ -73,15 +82,17 @@ jobs:
 
                 debug.push({
                   source: 'page',
-                  url,
+                  startIndex: (url.match(/startIndex=(\d+)/) || [null, null])[1],
                   length: text.length,
                   alwaysChristmas: text.includes(TARGET_NAME),
                   alwaysChristmasId: text.includes(TARGET_ID),
+                  alwaysChristmasLogo: text.includes('Amazon_Freevee_Always_Christmas'),
                   names: extractNames(text)
                 });
 
-                if (text.includes(TARGET_NAME) || text.includes(TARGET_ID)) {
+                if (hit(text)) {
                   found = text;
+                  console.log('FOUND from page response');
                 }
               } catch (e) {}
             });
@@ -91,39 +102,42 @@ jobs:
               timeout: 60000
             });
 
-            await page.waitForTimeout(8000);
+            await page.waitForTimeout(10000);
 
-            for (let i = 0; i < 30; i++) {
-              await page.mouse.wheel(0, 2200);
-              await page.waitForTimeout(600);
+            for (let i = 0; i < 100; i++) {
+              await page.mouse.wheel(0, 2400);
+              await page.waitForTimeout(500);
               if (found) break;
             }
 
             const urls = [...apiUrls];
 
-            const indexes = [540, 530, 550, 520, 560, 500, 600, 450, 650, 700, 750, 800, 850, 900];
+            const indexes = [
+              540, 542, 530, 550, 520, 560,
+              500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600,
+              450, 460, 470, 480, 490,
+              610, 620, 630, 640, 650, 660, 670, 680, 690, 700
+            ];
 
             for (const baseUrl of urls) {
               if (found) break;
 
               for (const idx of indexes) {
-                const testUrl = makeUrl(baseUrl, idx);
+                const testUrl = replaceStartIndex(baseUrl, idx);
 
                 try {
-                  const res = await page.request.get(testUrl, {
-                    headers: {
-                      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-                      'Accept': 'application/json,text/plain,*/*',
-                      'Accept-Language': 'en-US,en;q=0.9',
-                      'Referer': 'https://www.amazon.com/gp/video/livetv',
-                      'Origin': 'https://www.amazon.com'
-                    },
-                    timeout: 30000
-                  });
+                  const text = await page.evaluate(async (url) => {
+                    const res = await fetch(url, {
+                      credentials: 'include',
+                      headers: {
+                        'Accept': 'application/json,text/plain,*/*',
+                        'Accept-Language': 'en-US,en;q=0.9'
+                      }
+                    });
+                    return await res.text();
+                  }, testUrl);
 
-                  const text = await res.text();
-
-                  const hit = text.includes(TARGET_NAME) || text.includes(TARGET_ID);
+                  const isHit = hit(text);
 
                   debug.push({
                     source: 'targeted',
@@ -131,10 +145,11 @@ jobs:
                     length: text.length,
                     alwaysChristmas: text.includes(TARGET_NAME),
                     alwaysChristmasId: text.includes(TARGET_ID),
+                    alwaysChristmasLogo: text.includes('Amazon_Freevee_Always_Christmas'),
                     names: extractNames(text)
                   });
 
-                  if (hit) {
+                  if (isHit) {
                     found = text;
                     console.log('FOUND Always Christmas at startIndex=' + idx);
                     break;
@@ -162,6 +177,7 @@ jobs:
         run: |
           git config user.name "epg-bot"
           git config user.email "bot@users.noreply.github.com"
+
           git add public/* || true
 
           if git diff --cached --quiet; then
