@@ -35,6 +35,7 @@ jobs:
 
           const TARGET_ID = 'amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03';
           const TARGET_NAME = 'Always Christmas';
+          const TARGET_LOGO = 'Amazon_Freevee_Always_Christmas';
 
           function replaceStartIndex(rawUrl, index) {
             if (rawUrl.includes('startIndex=')) {
@@ -43,10 +44,24 @@ jobs:
             return rawUrl + '&startIndex=' + index;
           }
 
+          function isHtml(text) {
+            const t = text.trim().toLowerCase();
+            return t.startsWith('<!doctype') || t.startsWith('<html') || t.includes('<head>');
+          }
+
+          function looksLikeJson(text) {
+            const t = text.trim();
+            return t.startsWith('{') || t.startsWith('[');
+          }
+
           function hit(text) {
             return text.includes(TARGET_ID) ||
               text.includes(TARGET_NAME) ||
-              text.includes('Amazon_Freevee_Always_Christmas');
+              text.includes(TARGET_LOGO);
+          }
+
+          function validHit(text) {
+            return hit(text) && !isHtml(text) && looksLikeJson(text);
           }
 
           function extractNames(text) {
@@ -70,7 +85,6 @@ jobs:
 
             page.on('response', async (response) => {
               const url = response.url();
-
               if (!url.includes('/gp/video/api/paginateCollection')) return;
 
               apiUrls.add(url);
@@ -82,15 +96,19 @@ jobs:
                   source: 'page',
                   startIndex: (url.match(/startIndex=(\d+)/) || [null, null])[1],
                   length: text.length,
+                  isHtml: isHtml(text),
+                  looksLikeJson: looksLikeJson(text),
                   alwaysChristmas: text.includes(TARGET_NAME),
                   alwaysChristmasId: text.includes(TARGET_ID),
-                  alwaysChristmasLogo: text.includes('Amazon_Freevee_Always_Christmas'),
+                  alwaysChristmasLogo: text.includes(TARGET_LOGO),
                   names: extractNames(text)
                 });
 
-                if (hit(text)) {
+                if (validHit(text)) {
                   found = text;
-                  console.log('FOUND from page response');
+                  console.log('FOUND valid JSON from page response');
+                } else if (hit(text)) {
+                  console.log('Hit found but it was HTML or not JSON. Ignoring.');
                 }
               } catch (e) {}
             });
@@ -102,7 +120,7 @@ jobs:
 
             await page.waitForTimeout(10000);
 
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < 140; i++) {
               await page.mouse.wheel(0, 2400);
               await page.waitForTimeout(500);
               if (found) break;
@@ -114,7 +132,8 @@ jobs:
               540, 542, 530, 550, 520, 560,
               500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600,
               450, 460, 470, 480, 490,
-              610, 620, 630, 640, 650, 660, 670, 680, 690, 700
+              610, 620, 630, 640, 650, 660, 670, 680, 690, 700,
+              710, 720, 730, 740, 750, 760, 770, 780, 790, 800
             ];
 
             for (const baseUrl of urls) {
@@ -139,16 +158,20 @@ jobs:
                     source: 'targeted',
                     startIndex: idx,
                     length: text.length,
+                    isHtml: isHtml(text),
+                    looksLikeJson: looksLikeJson(text),
                     alwaysChristmas: text.includes(TARGET_NAME),
                     alwaysChristmasId: text.includes(TARGET_ID),
-                    alwaysChristmasLogo: text.includes('Amazon_Freevee_Always_Christmas'),
+                    alwaysChristmasLogo: text.includes(TARGET_LOGO),
                     names: extractNames(text)
                   });
 
-                  if (hit(text)) {
+                  if (validHit(text)) {
                     found = text;
-                    console.log('FOUND Always Christmas at startIndex=' + idx);
+                    console.log('FOUND valid Always Christmas JSON at startIndex=' + idx);
                     break;
+                  } else if (hit(text)) {
+                    console.log('Hit at startIndex=' + idx + ' was HTML or not JSON. Ignoring.');
                   }
                 } catch (e) {}
               }
@@ -157,13 +180,12 @@ jobs:
             fs.writeFileSync('public/amazon-debug.json', JSON.stringify(debug, null, 2));
 
             if (!found) {
-              console.log('Always Christmas not found this run. Keeping last good file.');
+              console.log('Always Christmas valid JSON not found this run. Not overwriting always-christmas.json.');
               await browser.close();
               return;
             }
 
             fs.writeFileSync('public/always-christmas.json', found);
-
             await browser.close();
           })();
           EOF
@@ -189,7 +211,7 @@ jobs:
       - name: Keep last good file if missing
         run: |
           if [ ! -f public/always-christmas.json ]; then
-            echo "No Always Christmas update found this run."
+            echo "No valid Always Christmas JSON found this run."
             echo "Keeping last good always-christmas.json if one already exists."
             exit 0
           fi
