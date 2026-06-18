@@ -71,9 +71,7 @@ jobs:
             page.on('response', async (response) => {
               const url = response.url();
 
-              if (!url.includes('/gp/video/api/paginateCollection')) {
-                return;
-              }
+              if (!url.includes('/gp/video/api/paginateCollection')) return;
 
               apiUrls.add(url);
 
@@ -137,8 +135,6 @@ jobs:
                     return await res.text();
                   }, testUrl);
 
-                  const isHit = hit(text);
-
                   debug.push({
                     source: 'targeted',
                     startIndex: idx,
@@ -149,7 +145,7 @@ jobs:
                     names: extractNames(text)
                   });
 
-                  if (isHit) {
+                  if (hit(text)) {
                     found = text;
                     console.log('FOUND Always Christmas at startIndex=' + idx);
                     break;
@@ -160,17 +156,15 @@ jobs:
 
             fs.writeFileSync('public/amazon-debug.json', JSON.stringify(debug, null, 2));
 
-            await browser.close();
-
             if (!found) {
-  console.log('Always Christmas not found this run.');
-  await browser.close();
-  return;
-}
+              console.log('Always Christmas not found this run. Keeping last good file.');
+              await browser.close();
+              return;
+            }
 
-fs.writeFileSync('public/always-christmas.json', found);
+            fs.writeFileSync('public/always-christmas.json', found);
 
-await browser.close();
+            await browser.close();
           })();
           EOF
 
@@ -192,7 +186,7 @@ await browser.close();
           git commit -m "Update Always Christmas"
           git push
 
-            - name: Keep last good file if missing
+      - name: Keep last good file if missing
         run: |
           if [ ! -f public/always-christmas.json ]; then
             echo "No Always Christmas update found this run."
