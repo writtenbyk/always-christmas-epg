@@ -188,9 +188,10 @@ jobs:
           git commit -m "Update Always Christmas"
           git push
 
-      - name: Fail if missing
+            - name: Keep last good file if missing
         run: |
           if [ ! -f public/always-christmas.json ]; then
-            echo "Always Christmas JSON not created"
-            exit 1
+            echo "No Always Christmas update found this run."
+            echo "Keeping last good always-christmas.json if one already exists."
+            exit 0
           fi
