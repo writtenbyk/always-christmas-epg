@@ -13,13 +13,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Fetch Amazon FAST
         run: |
           mkdir -p public
 
           curl -L "${{ secrets.AMAZON_URL }}" \
             -H "User-Agent: Mozilla/5.0" \
-            -H "Accept: application/json" \
+            -H "Accept: application/json,text/plain,*/*" \
             -H "Accept-Language: en-US,en;q=0.9" \
             -o public/always-christmas.json
 
@@ -27,6 +29,13 @@ jobs:
         run: |
           git config user.name "epg-bot"
           git config user.email "bot@users.noreply.github.com"
+
           git add public/always-christmas.json
-          git commit -m "update epg" || exit 0
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+
+          git commit -m "Update Always Christmas EPG"
           git push
