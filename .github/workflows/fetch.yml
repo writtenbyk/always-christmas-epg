@@ -1,0 +1,32 @@
+name: Fetch Always Christmas
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch Amazon FAST
+        run: |
+          mkdir -p public
+
+          curl -L "${{ secrets.AMAZON_URL }}" \
+            -H "User-Agent: Mozilla/5.0" \
+            -H "Accept: application/json" \
+            -H "Accept-Language: en-US,en;q=0.9" \
+            -o public/always-christmas.json
+
+      - name: Commit file
+        run: |
+          git config user.name "epg-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add public/always-christmas.json
+          git commit -m "update epg" || exit 0
+          git push
