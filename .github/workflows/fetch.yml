@@ -15,27 +15,73 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch Amazon FAST
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium
+
+      - name: Fetch Always Christmas from Amazon page
         run: |
           mkdir -p public
+          cat > fetch-amazon.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
 
-          curl -L --compressed "${{ secrets.AMAZON_URL }}" \
-            -H "User-Agent: Mozilla/5.0" \
-            -H "Accept: application/json,text/plain,*/*" \
-            -H "Accept-Language: en-US,en;q=0.9" \
-            -o public/always-christmas.json
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({
+              locale: 'en-US',
+              userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36'
+            });
+
+            let found = null;
+
+            page.on('response', async (response) => {
+              const url = response.url();
+              if (!url.includes('/gp/video/api/paginateCollection')) return;
+
+              try {
+                const text = await response.text();
+                if (
+                  text.includes('Always Christmas') ||
+                  text.includes('amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03')
+                ) {
+                  found = text;
+                }
+              } catch (e) {}
+            });
+
+            await page.goto('https://www.amazon.com/gp/video/livetv', {
+              waitUntil: 'networkidle',
+              timeout: 60000
+            });
+
+            await page.waitForTimeout(15000);
+            await browser.close();
+
+            if (!found) {
+              throw new Error('Always Christmas not found in Amazon network responses');
+            }
+
+            fs.writeFileSync('public/always-christmas.json', found);
+          })();
+          EOF
+
+          node fetch-amazon.js
 
       - name: Commit file
         run: |
           git config user.name "epg-bot"
           git config user.email "bot@users.noreply.github.com"
-
           git add public/always-christmas.json
-
           if git diff --cached --quiet; then
             echo "No changes"
             exit 0
           fi
-
           git commit -m "Update Always Christmas EPG"
           git push
