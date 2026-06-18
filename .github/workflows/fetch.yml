@@ -25,15 +25,17 @@ jobs:
           npm install playwright
           npx playwright install chromium
 
-            - name: Fetch Always Christmas from Amazon page
+      - name: Fetch Always Christmas from Amazon page
         run: |
           mkdir -p public
+
           cat > fetch-amazon.js <<'EOF'
           const { chromium } = require('playwright');
           const fs = require('fs');
 
           (async () => {
             const browser = await chromium.launch({ headless: true });
+
             const page = await browser.newPage({
               locale: 'en-US',
               viewport: { width: 1440, height: 1200 },
@@ -41,24 +43,27 @@ jobs:
             });
 
             let found = null;
-            let seen = [];
+            const seen = [];
 
             page.on('response', async (response) => {
               const url = response.url();
-              if (!url.includes('/gp/video/api/paginateCollection')) return;
+
+              if (!url.includes('/gp/video/api/paginateCollection')) {
+                return;
+              }
 
               try {
                 const text = await response.text();
 
                 const names = [...text.matchAll(/"name"\s*:\s*"([^"]+)"/g)]
-                  .slice(0, 20)
+                  .slice(0, 30)
                   .map(m => m[1]);
 
                 seen.push({
                   url,
                   length: text.length,
-                  always: text.includes('Always Christmas'),
-                  id: text.includes('amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03'),
+                  alwaysChristmas: text.includes('Always Christmas'),
+                  alwaysChristmasId: text.includes('amzn1.dv.gti.c443f154-615f-43c5-b61d-8de681dead03'),
                   names
                 });
 
@@ -76,20 +81,25 @@ jobs:
               timeout: 60000
             });
 
-            for (let i = 0; i < 30; i++) {
+            await page.waitForTimeout(8000);
+
+            for (let i = 0; i < 35; i++) {
               await page.mouse.wheel(0, 1800);
-              await page.waitForTimeout(2000);
-              if (found) break;
+              await page.waitForTimeout(1500);
+
+              if (found) {
+                break;
+              }
             }
 
-            await page.waitForTimeout(10000);
+            await page.waitForTimeout(8000);
 
             fs.writeFileSync('public/amazon-debug.json', JSON.stringify(seen, null, 2));
 
             await browser.close();
 
             if (!found) {
-              throw new Error('Always Christmas not found. Saved debug to public/amazon-debug.json');
+              throw new Error('Always Christmas not found. See public/amazon-debug.json after commit if available.');
             }
 
             fs.writeFileSync('public/always-christmas.json', found);
@@ -99,13 +109,24 @@ jobs:
           node fetch-amazon.js
 
       - name: Commit file
+        if: always()
         run: |
           git config user.name "epg-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add public/always-christmas.json
+
+          git add public/always-christmas.json public/amazon-debug.json || true
+
           if git diff --cached --quiet; then
             echo "No changes"
             exit 0
           fi
-          git commit -m "Update Always Christmas EPG"
+
+          git commit -m "Update Always Christmas EPG/debug"
           git push
+
+      - name: Fail if Always Christmas missing
+        run: |
+          if [ ! -f public/always-christmas.json ]; then
+            echo "Always Christmas JSON was not created. Check public/amazon-debug.json."
+            exit 1
+          fi
