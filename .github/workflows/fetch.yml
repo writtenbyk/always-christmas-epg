@@ -55,9 +55,7 @@ jobs:
           }
 
           function hit(text) {
-            return text.includes(TARGET_ID) ||
-              text.includes(TARGET_NAME) ||
-              text.includes(TARGET_LOGO);
+            return text.includes(TARGET_ID) || text.includes(TARGET_NAME) || text.includes(TARGET_LOGO);
           }
 
           function validHit(text) {
@@ -65,9 +63,7 @@ jobs:
           }
 
           function extractNames(text) {
-            return [...text.matchAll(/"name"\s*:\s*"([^"]+)"/g)]
-              .slice(0, 80)
-              .map(m => m[1]);
+            return [...text.matchAll(/"name"\s*:\s*"([^"]+)"/g)].slice(0, 80).map(m => m[1]);
           }
 
           (async () => {
@@ -107,8 +103,6 @@ jobs:
                 if (validHit(text)) {
                   found = text;
                   console.log('FOUND valid JSON from page response');
-                } else if (hit(text)) {
-                  console.log('Hit found but it was HTML or not JSON. Ignoring.');
                 }
               } catch (e) {}
             });
@@ -129,10 +123,10 @@ jobs:
             const urls = [...apiUrls];
 
             const indexes = [
-  800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200,
-  540, 550, 560, 570, 580, 590, 600,
-  650, 700, 750
-];
+              800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200,
+              540, 550, 560, 570, 580, 590, 600,
+              650, 700, 750
+            ];
 
             for (const baseUrl of urls) {
               if (found) break;
@@ -168,8 +162,6 @@ jobs:
                     found = text;
                     console.log('FOUND valid Always Christmas JSON at startIndex=' + idx);
                     break;
-                  } else if (hit(text)) {
-                    console.log('Hit at startIndex=' + idx + ' was HTML or not JSON. Ignoring.');
                   }
                 } catch (e) {}
               }
